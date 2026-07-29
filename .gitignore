@@ -3,10 +3,14 @@ dist/
 
 .env
 
-# Local state: token cache, SQLite db (may contain summaries of school email content).
+# Local state: OAuth token caches, mock-mode dedupe store.
 data/*
 !data/.gitkeep
 
 # Generated reports.
 reports/*
 !reports/.gitkeep
+
+# Web app build output.
+web/.next/
+web/node_modules/
