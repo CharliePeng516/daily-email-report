@@ -1,74 +1,83 @@
-import { mkdirSync } from 'node:fs';
-import path from 'node:path';
-import Database from 'better-sqlite3';
-import { SCHEMA_SQL } from './schema.js';
-import type { ProcessingError, ScoredEmail } from '../types.js';
+import { and, eq } from 'drizzle-orm';
+import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+import { config, ANALYSIS_VERSION } from '../config.js';
 import type { ProviderName } from '../providers/types.js';
-import { ANALYSIS_VERSION } from '../config.js';
+import type { ProcessingError, ScoredEmail } from '../types.js';
+import { processedEmails, processingErrors, runCheckpoints } from './schema.js';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-mkdirSync(DATA_DIR, { recursive: true });
+// Lazy on purpose: importing this module must not require DATABASE_URL or
+// open a connection — --mock runs never call these functions (see
+// jobs/daily-report.ts, which uses db/mock-store.ts instead) and shouldn't
+// need a live Postgres instance at all.
+let sql: postgres.Sql | undefined;
+let db: PostgresJsDatabase | undefined;
 
-const db = new Database(path.join(DATA_DIR, 'emails.db'));
-db.pragma('journal_mode = WAL');
-db.exec(SCHEMA_SQL);
-
-export function getCheckpoint(jobName: string): string | null {
-  const row = db
-    .prepare('SELECT last_success_at FROM run_checkpoints WHERE job_name = ?')
-    .get(jobName) as { last_success_at: string } | undefined;
-  return row?.last_success_at ?? null;
+function getDb(): PostgresJsDatabase {
+  if (!db) {
+    sql = postgres(config.databaseUrl, { max: 5 });
+    db = drizzle(sql);
+  }
+  return db;
 }
 
-export function setCheckpoint(jobName: string, isoTimestamp: string): void {
-  db.prepare(
-    `INSERT INTO run_checkpoints (job_name, last_success_at) VALUES (?, ?)
-     ON CONFLICT(job_name) DO UPDATE SET last_success_at = excluded.last_success_at`,
-  ).run(jobName, isoTimestamp);
+/** Closes the pool so the CLI process can exit cleanly. No-op if never connected. */
+export async function closeDb(): Promise<void> {
+  await sql?.end();
 }
 
-export function isAlreadyProcessed(provider: ProviderName, messageId: string): boolean {
-  return (
-    db.prepare('SELECT 1 FROM processed_emails WHERE provider = ? AND message_id = ?').get(provider, messageId) !==
-    undefined
-  );
+export async function getCheckpoint(jobName: string): Promise<string | null> {
+  const rows = await getDb()
+    .select({ lastSuccessAt: runCheckpoints.lastSuccessAt })
+    .from(runCheckpoints)
+    .where(eq(runCheckpoints.jobName, jobName))
+    .limit(1);
+  return rows[0]?.lastSuccessAt.toISOString() ?? null;
 }
 
-export function saveProcessedEmail(provider: ProviderName, item: ScoredEmail, processedAt: string): void {
-  db.prepare(
-    `INSERT INTO processed_emails (
-       provider, message_id, conversation_id, received_at, sender_address, subject, summary,
-       category, score, level, action, deadline, sensitive, confidence, web_link,
-       analysis_version, processed_at
-     ) VALUES (@provider, @messageId, @conversationId, @receivedAt, @senderAddress, @subject, @summary,
-       @category, @score, @level, @action, @deadline, @sensitive, @confidence, @webLink,
-       @analysisVersion, @processedAt)
-     ON CONFLICT(provider, message_id) DO NOTHING`,
-  ).run({
-    provider,
-    messageId: item.email.id,
-    conversationId: item.email.conversationId,
-    receivedAt: item.email.receivedDateTime,
-    senderAddress: item.email.fromAddress,
-    subject: item.email.subject,
-    summary: item.analysis.summary,
-    category: item.analysis.category,
-    score: item.score,
-    level: item.level,
-    action: item.analysis.action,
-    deadline: item.analysis.deadline,
-    sensitive: item.analysis.sensitive ? 1 : 0,
-    confidence: item.analysis.confidence,
-    webLink: item.email.webLink,
-    analysisVersion: ANALYSIS_VERSION,
-    processedAt,
-  });
+export async function setCheckpoint(jobName: string, isoTimestamp: string): Promise<void> {
+  await getDb()
+    .insert(runCheckpoints)
+    .values({ jobName, lastSuccessAt: new Date(isoTimestamp) })
+    .onConflictDoUpdate({ target: runCheckpoints.jobName, set: { lastSuccessAt: new Date(isoTimestamp) } });
 }
 
-export function saveProcessingError(provider: ProviderName, error: ProcessingError, runAt: string): void {
-  db.prepare(
-    'INSERT INTO processing_errors (provider, message_id, subject, run_at, error) VALUES (?, ?, ?, ?, ?)',
-  ).run(provider, error.messageId, error.subject, runAt, error.error);
+export async function isAlreadyProcessed(provider: ProviderName, messageId: string): Promise<boolean> {
+  const rows = await getDb()
+    .select({ messageId: processedEmails.messageId })
+    .from(processedEmails)
+    .where(and(eq(processedEmails.provider, provider), eq(processedEmails.messageId, messageId)))
+    .limit(1);
+  return rows.length > 0;
 }
 
-export default db;
+export async function saveProcessedEmail(provider: ProviderName, item: ScoredEmail, processedAt: string): Promise<void> {
+  await getDb()
+    .insert(processedEmails)
+    .values({
+      provider,
+      messageId: item.email.id,
+      conversationId: item.email.conversationId,
+      receivedAt: new Date(item.email.receivedDateTime),
+      senderAddress: item.email.fromAddress,
+      subject: item.email.subject,
+      summary: item.analysis.summary,
+      category: item.analysis.category,
+      score: item.score,
+      level: item.level,
+      action: item.analysis.action,
+      deadline: item.analysis.deadline ? new Date(item.analysis.deadline) : null,
+      sensitive: item.analysis.sensitive,
+      confidence: item.analysis.confidence,
+      webLink: item.email.webLink,
+      analysisVersion: ANALYSIS_VERSION,
+      processedAt: new Date(processedAt),
+    })
+    .onConflictDoNothing({ target: [processedEmails.provider, processedEmails.messageId] });
+}
+
+export async function saveProcessingError(provider: ProviderName, error: ProcessingError, runAt: string): Promise<void> {
+  await getDb()
+    .insert(processingErrors)
+    .values({ provider, messageId: error.messageId, subject: error.subject, runAt: new Date(runAt), error: error.error });
+}

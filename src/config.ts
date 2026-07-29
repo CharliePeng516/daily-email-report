@@ -57,6 +57,13 @@ export const config = {
     return requiredForRealRun('GOOGLE_CLIENT_SECRET');
   },
 
+  // Hosted Postgres (e.g. Neon) — shared with the web dashboard, which reads
+  // the same tables this CLI writes to. Required even for --mock, since mock
+  // runs still exercise the dedupe/checkpoint tables.
+  get databaseUrl(): string {
+    return requiredForRealRun('DATABASE_URL');
+  },
+
   llmProvider,
   llmSupportsStrictJsonSchema: llmProvider === 'openai',
   llmBaseUrl: optional('LLM_BASE_URL', llmDefaults.baseUrl ?? ''),

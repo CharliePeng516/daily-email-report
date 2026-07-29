@@ -1,10 +1,5 @@
-import {
-  getCheckpoint,
-  isAlreadyProcessed,
-  saveProcessedEmail,
-  saveProcessingError,
-  setCheckpoint,
-} from '../db/client.js';
+import { getCheckpoint, isAlreadyProcessed, saveProcessedEmail, saveProcessingError, setCheckpoint } from '../db/client.js';
+import { isAlreadyProcessedMock, markProcessedMock } from '../db/mock-store.js';
 import { classifyEmail, classifyEmailMock } from '../email/classify.js';
 import { levelForScore, scoreEmail, sortByPriority } from '../email/priority.js';
 import { getSampleMessages } from '../fixtures/sample-messages.js';
@@ -32,7 +27,7 @@ export interface RunResult {
   errorCount: number;
 }
 
-function resolveSince(since: string | undefined, provider: ProviderName): string {
+async function resolveSince(since: string | undefined, provider: ProviderName, mock: boolean): Promise<string> {
   if (since) {
     const hoursMatch = since.match(/^(\d+)\s*hours?$/i);
     if (hoursMatch) {
@@ -45,8 +40,12 @@ function resolveSince(since: string | undefined, provider: ProviderName): string
     return parsed.toISOString();
   }
 
-  const checkpoint = getCheckpoint(checkpointName(provider));
-  if (checkpoint) return checkpoint;
+  // --mock never touches the database (see db/mock-store.ts) — the fixture
+  // set doesn't change based on the window, so there's no checkpoint to read.
+  if (!mock) {
+    const checkpoint = await getCheckpoint(checkpointName(provider));
+    if (checkpoint) return checkpoint;
+  }
 
   return new Date(Date.now() - DEFAULT_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
 }
@@ -66,7 +65,7 @@ async function classify(email: NormalisedEmail, mock: boolean) {
  */
 export async function runDailyReport(options: RunOptions): Promise<RunResult> {
   const runAt = new Date();
-  const sinceIso = resolveSince(options.since, options.provider);
+  const sinceIso = await resolveSince(options.since, options.provider, options.mock);
 
   const fetched: FetchedItem[] = options.mock
     ? getSampleMessages().map((email): FetchedItem => ({ ok: true, email }))
@@ -79,16 +78,23 @@ export async function runDailyReport(options: RunOptions): Promise<RunResult> {
     if (!item.ok) {
       const error: ProcessingError = { messageId: item.id, subject: item.subject, error: item.error };
       errors.push(error);
-      saveProcessingError(options.provider, error, runAt.toISOString());
+      if (!options.mock) await saveProcessingError(options.provider, error, runAt.toISOString());
       continue;
     }
 
-    if (isAlreadyProcessed(options.provider, item.email.id)) continue;
+    const alreadyProcessed = options.mock
+      ? isAlreadyProcessedMock(options.provider, item.email.id)
+      : await isAlreadyProcessed(options.provider, item.email.id);
+    if (alreadyProcessed) continue;
 
     try {
       const scoredItem = await classify(item.email, options.mock);
       scored.push(scoredItem);
-      saveProcessedEmail(options.provider, scoredItem, runAt.toISOString());
+      if (options.mock) {
+        markProcessedMock(options.provider, item.email.id);
+      } else {
+        await saveProcessedEmail(options.provider, scoredItem, runAt.toISOString());
+      }
     } catch (err) {
       const error: ProcessingError = {
         messageId: item.email.id,
@@ -96,7 +102,7 @@ export async function runDailyReport(options: RunOptions): Promise<RunResult> {
         error: err instanceof Error ? err.message : String(err),
       };
       errors.push(error);
-      saveProcessingError(options.provider, error, runAt.toISOString());
+      if (!options.mock) await saveProcessingError(options.provider, error, runAt.toISOString());
     }
   }
 
@@ -112,7 +118,7 @@ export async function runDailyReport(options: RunOptions): Promise<RunResult> {
   const outputPath = saveReport(markdown, options.output);
 
   if (!options.mock) {
-    setCheckpoint(checkpointName(options.provider), runAt.toISOString());
+    await setCheckpoint(checkpointName(options.provider), runAt.toISOString());
   }
 
   return { outputPath, processedCount: fetched.length, errorCount: errors.length };

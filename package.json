@@ -12,21 +12,25 @@
     "report:mock:outlook": "tsx src/index.ts daily-report --mock --provider outlook",
     "report:mock:gmail": "tsx src/index.ts daily-report --mock --provider gmail",
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@azure/msal-node": "^5.4.2",
-    "better-sqlite3": "^11.3.0",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
+    "drizzle-orm": "^0.45.2",
     "html-to-text": "^9.0.5",
     "openai": "^4.63.0",
+    "postgres": "^3.4.9",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.11",
     "@types/html-to-text": "^9.0.4",
     "@types/node": "^20.14.15",
+    "drizzle-kit": "^0.31.10",
     "tsx": "^4.19.0",
     "typescript": "^5.5.4"
   }

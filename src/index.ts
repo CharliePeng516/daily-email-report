@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+import { closeDb } from './db/client.js';
 import { runDailyReport } from './jobs/daily-report.js';
 import type { ProviderName } from './providers/index.js';
 
@@ -37,6 +38,9 @@ program
     } catch (err) {
       console.error(`daily-report failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exitCode = 1;
+    } finally {
+      // Only opened for real (non-mock) runs — closeDb() is a no-op if it was never used.
+      await closeDb();
     }
   });
 
