@@ -1,0 +1,12 @@
+node_modules/
+dist/
+
+.env
+
+# Local state: token cache, SQLite db (may contain summaries of school email content).
+data/*
+!data/.gitkeep
+
+# Generated reports.
+reports/*
+!reports/.gitkeep

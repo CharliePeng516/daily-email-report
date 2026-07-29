@@ -1,0 +1,31 @@
+{
+  "name": "daily-email-report",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-first AI agent that scans a school mailbox, classifies and ranks messages by importance, and generates a daily Markdown report.",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "report": "tsx src/index.ts daily-report",
+    "report:mock": "tsx src/index.ts daily-report --mock --output reports/today.md",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@azure/msal-node": "^2.13.1",
+    "better-sqlite3": "^11.3.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "html-to-text": "^9.0.5",
+    "openai": "^4.63.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/html-to-text": "^9.0.4",
+    "@types/node": "^20.14.15",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}
