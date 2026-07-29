@@ -27,15 +27,19 @@ export interface RunResult {
   errorCount: number;
 }
 
+const RELATIVE_WINDOW_PATTERN = /^(\d+)\s*(hour|day)s?$/i;
+const MS_PER_UNIT: Record<string, number> = { hour: 60 * 60 * 1000, day: 24 * 60 * 60 * 1000 };
+
 async function resolveSince(since: string | undefined, provider: ProviderName, mock: boolean): Promise<string> {
   if (since) {
-    const hoursMatch = since.match(/^(\d+)\s*hours?$/i);
-    if (hoursMatch) {
-      return new Date(Date.now() - Number(hoursMatch[1]) * 60 * 60 * 1000).toISOString();
+    const relativeMatch = since.match(RELATIVE_WINDOW_PATTERN);
+    if (relativeMatch) {
+      const [, amount, unit] = relativeMatch;
+      return new Date(Date.now() - Number(amount) * MS_PER_UNIT[unit.toLowerCase()]).toISOString();
     }
     const parsed = new Date(since);
     if (Number.isNaN(parsed.getTime())) {
-      throw new Error(`Could not parse --since value "${since}". Use an ISO timestamp or e.g. "24 hours".`);
+      throw new Error(`Could not parse --since value "${since}". Use an ISO timestamp or e.g. "24 hours" / "14 days".`);
     }
     return parsed.toISOString();
   }

@@ -16,7 +16,7 @@ program
   .requiredOption('--provider <name>', 'Mailbox to read from: "outlook" or "gmail".')
   .option(
     '--since <window>',
-    'How far back to read: an ISO timestamp or e.g. "24 hours". Defaults to the last successful run for this provider, or 24 hours on first run.',
+    'How far back to read: an ISO timestamp, or e.g. "24 hours" / "14 days". Defaults to the last successful run for this provider, or 24 hours on first run.',
   )
   .option('--output <path>', 'Where to write the Markdown report. Defaults to reports/<provider>-today.md.')
   .option('--mock', 'Run against local fixture data instead of live Microsoft/Google/OpenAI calls.', false)
