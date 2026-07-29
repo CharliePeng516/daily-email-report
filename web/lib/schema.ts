@@ -1,17 +1,8 @@
 import { boolean, doublePrecision, integer, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core';
 
-// "7. Storage, scheduling and reliability" — minimal record only. The full
-// message body is deliberately not persisted; the report links back to the
-// provider's own web UI instead of duplicating sensitive content at rest.
-//
-// message_id is only unique per mailbox provider (Outlook and Gmail have
-// separate id spaces), so provider + message_id is the composite key, and
-// checkpoints/errors are scoped per provider too — the two mailboxes have
-// independent read progress.
-//
-// This table is the shared contract between the CLI (writer, runs locally —
-// see src/db/client.ts) and the web dashboard (reader, deployed — see
-// web/lib/db.ts). Keep the two schema files in sync if this changes.
+// Mirrors ../../src/db/schema.ts exactly — this app only reads these tables,
+// the CLI (running locally, since OAuth device/loopback logins can't run
+// unattended on a server) is the only writer. Keep the two files in sync.
 export const processedEmails = pgTable(
   'processed_emails',
   {

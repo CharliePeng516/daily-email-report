@@ -10,7 +10,3 @@ data/*
 # Generated reports.
 reports/*
 !reports/.gitkeep
-
-# Web app build output.
-web/.next/
-web/node_modules/

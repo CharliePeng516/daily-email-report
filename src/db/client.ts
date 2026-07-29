@@ -65,6 +65,7 @@ export async function saveProcessedEmail(provider: ProviderName, item: ScoredEma
       category: item.analysis.category,
       score: item.score,
       level: item.level,
+      actionRequired: item.analysis.actionRequired,
       action: item.analysis.action,
       deadline: item.analysis.deadline ? new Date(item.analysis.deadline) : null,
       sensitive: item.analysis.sensitive,

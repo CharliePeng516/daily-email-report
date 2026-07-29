@@ -9,6 +9,7 @@ CREATE TABLE "processed_emails" (
 	"category" text NOT NULL,
 	"score" integer NOT NULL,
 	"level" text NOT NULL,
+	"action_required" boolean NOT NULL,
 	"action" text,
 	"deadline" timestamp with time zone,
 	"sensitive" boolean NOT NULL,

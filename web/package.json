@@ -1,0 +1,36 @@
+{
+  "name": "daily-email-report-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Live dashboard for daily-email-report — reads the same Postgres DB the CLI writes to.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@emotion/cache": "^11.13.5",
+    "@emotion/react": "^11.13.5",
+    "@emotion/styled": "^11.13.5",
+    "@mui/icons-material": "^7.3.11",
+    "@mui/material": "^7.3.11",
+    "@mui/material-nextjs": "^7.3.10",
+    "drizzle-orm": "^0.45.2",
+    "next": "^15.5.22",
+    "postgres": "^3.4.9",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.15",
+    "@types/react": "^19.0.14",
+    "@types/react-dom": "^19.0.5",
+    "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "postcss": "^8.5.24",
+    "sharp": "^0.35.3"
+  }
+}

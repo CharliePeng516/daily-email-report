@@ -1,5 +1,5 @@
 {
-  "id": "487718dc-3cf2-40d7-8f01-1fc089f95aec",
+  "id": "f8b0aee8-7e2a-44dc-86cf-fec34f2baa99",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -65,6 +65,12 @@
         "level": {
           "name": "level",
           "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action_required": {
+          "name": "action_required",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true
         },
