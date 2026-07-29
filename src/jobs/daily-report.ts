@@ -7,20 +7,23 @@ import {
 } from '../db/client.js';
 import { classifyEmail, classifyEmailMock } from '../email/classify.js';
 import { levelForScore, scoreEmail, sortByPriority } from '../email/priority.js';
-import { normaliseMessage } from '../email/preprocess.js';
 import { getSampleMessages } from '../fixtures/sample-messages.js';
-import { fetchMessagesSince, type GraphMessageRaw } from '../graph/messages.js';
+import { getProvider, type FetchedItem, type ProviderName } from '../providers/index.js';
 import { generateMarkdownReport } from '../report/generate.js';
 import { saveReport } from '../report/deliver.js';
-import type { ProcessingError, ScoredEmail } from '../types.js';
+import type { NormalisedEmail, ProcessingError, ScoredEmail } from '../types.js';
 
-const JOB_NAME = 'daily-report';
 const DEFAULT_WINDOW_HOURS = 24;
+
+function checkpointName(provider: ProviderName): string {
+  return `daily-report:${provider}`;
+}
 
 export interface RunOptions {
   since?: string;
   output: string;
   mock: boolean;
+  provider: ProviderName;
 }
 
 export interface RunResult {
@@ -29,7 +32,7 @@ export interface RunResult {
   errorCount: number;
 }
 
-function resolveSince(since: string | undefined): string {
+function resolveSince(since: string | undefined, provider: ProviderName): string {
   if (since) {
     const hoursMatch = since.match(/^(\d+)\s*hours?$/i);
     if (hoursMatch) {
@@ -42,50 +45,58 @@ function resolveSince(since: string | undefined): string {
     return parsed.toISOString();
   }
 
-  const checkpoint = getCheckpoint(JOB_NAME);
+  const checkpoint = getCheckpoint(checkpointName(provider));
   if (checkpoint) return checkpoint;
 
   return new Date(Date.now() - DEFAULT_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
 }
 
-async function processMessage(raw: GraphMessageRaw, mock: boolean): Promise<ScoredEmail> {
-  const email = normaliseMessage(raw);
+async function classify(email: NormalisedEmail, mock: boolean) {
   const analysis = mock ? classifyEmailMock(email) : await classifyEmail(email);
   const score = scoreEmail(email, analysis);
   const level = levelForScore(score);
-  return { email, analysis, score, level };
+  return { email, analysis, score, level } satisfies ScoredEmail;
 }
 
 /**
- * Runs the full pipeline: fetch -> preprocess -> classify -> score -> persist
- * -> generate report -> save. One bad message is caught and logged rather
- * than aborting the whole run (MVP acceptance criteria, "8. Privacy and
- * safety controls").
+ * Runs the full pipeline for one mailbox provider: fetch -> preprocess ->
+ * classify -> score -> persist -> generate report -> save. One bad message
+ * (whether it fails to fetch/normalise or fails classification) is caught
+ * and logged rather than aborting the whole run.
  */
 export async function runDailyReport(options: RunOptions): Promise<RunResult> {
   const runAt = new Date();
-  const sinceIso = resolveSince(options.since);
+  const sinceIso = resolveSince(options.since, options.provider);
 
-  const rawMessages = options.mock ? getSampleMessages() : await fetchMessagesSince(sinceIso);
+  const fetched: FetchedItem[] = options.mock
+    ? getSampleMessages().map((email): FetchedItem => ({ ok: true, email }))
+    : await getProvider(options.provider).fetchMessagesSince(sinceIso);
 
   const scored: ScoredEmail[] = [];
   const errors: ProcessingError[] = [];
 
-  for (const raw of rawMessages) {
-    if (isAlreadyProcessed(raw.id)) continue;
+  for (const item of fetched) {
+    if (!item.ok) {
+      const error: ProcessingError = { messageId: item.id, subject: item.subject, error: item.error };
+      errors.push(error);
+      saveProcessingError(options.provider, error, runAt.toISOString());
+      continue;
+    }
+
+    if (isAlreadyProcessed(options.provider, item.email.id)) continue;
 
     try {
-      const item = await processMessage(raw, options.mock);
-      scored.push(item);
-      saveProcessedEmail(item, runAt.toISOString());
+      const scoredItem = await classify(item.email, options.mock);
+      scored.push(scoredItem);
+      saveProcessedEmail(options.provider, scoredItem, runAt.toISOString());
     } catch (err) {
       const error: ProcessingError = {
-        messageId: raw.id,
-        subject: raw.subject ?? '(unknown subject)',
+        messageId: item.email.id,
+        subject: item.email.subject,
         error: err instanceof Error ? err.message : String(err),
       };
       errors.push(error);
-      saveProcessingError(error, runAt.toISOString());
+      saveProcessingError(options.provider, error, runAt.toISOString());
     }
   }
 
@@ -93,7 +104,7 @@ export async function runDailyReport(options: RunOptions): Promise<RunResult> {
 
   const markdown = generateMarkdownReport({
     generatedAt: runAt,
-    processedCount: rawMessages.length,
+    processedCount: fetched.length,
     items: sorted,
     errors,
   });
@@ -101,8 +112,8 @@ export async function runDailyReport(options: RunOptions): Promise<RunResult> {
   const outputPath = saveReport(markdown, options.output);
 
   if (!options.mock) {
-    setCheckpoint(JOB_NAME, runAt.toISOString());
+    setCheckpoint(checkpointName(options.provider), runAt.toISOString());
   }
 
-  return { outputPath, processedCount: rawMessages.length, errorCount: errors.length };
+  return { outputPath, processedCount: fetched.length, errorCount: errors.length };
 }

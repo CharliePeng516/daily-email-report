@@ -1,10 +1,9 @@
 import { htmlToText } from 'html-to-text';
-import type { GraphMessageRaw } from '../graph/messages.js';
-import type { NormalisedEmail } from '../types.js';
 
 // Common markers that precede quoted history / signatures in replies and
 // forwards. We cut the body at the earliest match so the model only sees the
-// new content the sender actually wrote.
+// new content the sender actually wrote. Shared by every provider — Outlook
+// and Gmail both hand this a plain { contentType, content } body.
 const QUOTED_HISTORY_PATTERNS: RegExp[] = [
   /^-{2,}\s*Original Message\s*-{2,}/im,
   /^On .{0,120} wrote:\s*$/im,
@@ -45,30 +44,4 @@ export function preprocessBody(body: { contentType?: string; content?: string } 
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-}
-
-function recipientAddresses(recipients: GraphMessageRaw['toRecipients']): string[] {
-  return (recipients ?? [])
-    .map((r) => r.emailAddress?.address)
-    .filter((addr): addr is string => Boolean(addr));
-}
-
-export function normaliseMessage(raw: GraphMessageRaw): NormalisedEmail {
-  const sender = raw.from ?? raw.sender;
-
-  return {
-    id: raw.id,
-    conversationId: raw.conversationId,
-    subject: raw.subject?.trim() || '(no subject)',
-    fromName: sender?.emailAddress?.name ?? 'Unknown sender',
-    fromAddress: (sender?.emailAddress?.address ?? '').toLowerCase(),
-    toRecipients: recipientAddresses(raw.toRecipients),
-    ccRecipients: recipientAddresses(raw.ccRecipients),
-    receivedDateTime: raw.receivedDateTime,
-    importance: raw.importance ?? 'normal',
-    isRead: raw.isRead ?? false,
-    hasAttachments: raw.hasAttachments ?? false,
-    bodyText: preprocessBody(raw.body),
-    webLink: raw.webLink ?? '',
-  };
 }

@@ -3,6 +3,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { SCHEMA_SQL } from './schema.js';
 import type { ProcessingError, ScoredEmail } from '../types.js';
+import type { ProviderName } from '../providers/types.js';
 import { ANALYSIS_VERSION } from '../config.js';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -26,21 +27,25 @@ export function setCheckpoint(jobName: string, isoTimestamp: string): void {
   ).run(jobName, isoTimestamp);
 }
 
-export function isAlreadyProcessed(messageId: string): boolean {
-  return db.prepare('SELECT 1 FROM processed_emails WHERE message_id = ?').get(messageId) !== undefined;
+export function isAlreadyProcessed(provider: ProviderName, messageId: string): boolean {
+  return (
+    db.prepare('SELECT 1 FROM processed_emails WHERE provider = ? AND message_id = ?').get(provider, messageId) !==
+    undefined
+  );
 }
 
-export function saveProcessedEmail(item: ScoredEmail, processedAt: string): void {
+export function saveProcessedEmail(provider: ProviderName, item: ScoredEmail, processedAt: string): void {
   db.prepare(
     `INSERT INTO processed_emails (
-       message_id, conversation_id, received_at, sender_address, subject, summary,
+       provider, message_id, conversation_id, received_at, sender_address, subject, summary,
        category, score, level, action, deadline, sensitive, confidence, web_link,
        analysis_version, processed_at
-     ) VALUES (@messageId, @conversationId, @receivedAt, @senderAddress, @subject, @summary,
+     ) VALUES (@provider, @messageId, @conversationId, @receivedAt, @senderAddress, @subject, @summary,
        @category, @score, @level, @action, @deadline, @sensitive, @confidence, @webLink,
        @analysisVersion, @processedAt)
-     ON CONFLICT(message_id) DO NOTHING`,
+     ON CONFLICT(provider, message_id) DO NOTHING`,
   ).run({
+    provider,
     messageId: item.email.id,
     conversationId: item.email.conversationId,
     receivedAt: item.email.receivedDateTime,
@@ -60,10 +65,10 @@ export function saveProcessedEmail(item: ScoredEmail, processedAt: string): void
   });
 }
 
-export function saveProcessingError(error: ProcessingError, runAt: string): void {
+export function saveProcessingError(provider: ProviderName, error: ProcessingError, runAt: string): void {
   db.prepare(
-    'INSERT INTO processing_errors (message_id, subject, run_at, error) VALUES (?, ?, ?, ?)',
-  ).run(error.messageId, error.subject, runAt, error.error);
+    'INSERT INTO processing_errors (provider, message_id, subject, run_at, error) VALUES (?, ?, ?, ?, ?)',
+  ).run(provider, error.messageId, error.subject, runAt, error.error);
 }
 
 export default db;

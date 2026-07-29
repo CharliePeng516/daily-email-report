@@ -7,13 +7,15 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
-    "report": "tsx src/index.ts daily-report",
-    "report:mock": "tsx src/index.ts daily-report --mock --output reports/today.md",
+    "report:outlook": "tsx src/index.ts daily-report --provider outlook",
+    "report:gmail": "tsx src/index.ts daily-report --provider gmail",
+    "report:mock:outlook": "tsx src/index.ts daily-report --mock --provider outlook",
+    "report:mock:gmail": "tsx src/index.ts daily-report --mock --provider gmail",
     "build": "tsc",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@azure/msal-node": "^2.13.1",
+    "@azure/msal-node": "^5.4.2",
     "better-sqlite3": "^11.3.0",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",

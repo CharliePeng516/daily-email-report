@@ -1,14 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { PublicClientApplication, type AccountInfo } from '@azure/msal-node';
-import { config } from '../config.js';
+import { config } from '../../config.js';
 
 // Read-only delegated scopes only — see "3. Microsoft 365 email connection" in
 // the workflow spec. Do not add Mail.ReadWrite or Mail.Send here for v1.
 const SCOPES = ['openid', 'profile', 'offline_access', 'User.Read', 'Mail.Read'];
 
 const DATA_DIR = path.join(process.cwd(), 'data');
-const CACHE_PATH = path.join(DATA_DIR, 'token-cache.json');
+const CACHE_PATH = path.join(DATA_DIR, 'outlook-token-cache.json');
 
 let pcaInstance: PublicClientApplication | undefined;
 

@@ -1,7 +1,8 @@
 # daily-email-report
 
 Scan daily email from a school mailbox, auto filter and sort messages by importance, and generate a
-concise daily report.
+concise daily report. Supports two mailbox providers — **Outlook** (Microsoft Graph) and **Gmail**
+— behind the same pipeline.
 
 A **read-first, deterministic workflow with one AI analysis step** — not an autonomous multi-agent
 system. Ordinary code controls when data is read, what permissions are available, how scores are
@@ -13,18 +14,23 @@ intent, extracting actions, and identifying deadlines.
 ```
 Scheduler
   |
-Microsoft Graph Connector   (auth/microsoft.ts, graph/messages.ts)
+Mail Provider (Outlook or Gmail)   (providers/outlook/*, providers/gmail/*)
   |
-Email Preprocessor          (email/preprocess.ts)
+Email Preprocessor                 (email/preprocess.ts)
   |
-AI Classifier                (email/classify.ts)
+AI Classifier                      (email/classify.ts)
   |
-Priority Scorer               (email/rules.ts, email/priority.ts)
+Priority Scorer                    (email/rules.ts, email/priority.ts)
   |
-SQLite                         (db/client.ts, db/schema.ts)
+SQLite                             (db/client.ts, db/schema.ts)
   |
-Daily Report Generator          (report/generate.ts, report/deliver.ts)
+Daily Report Generator             (report/generate.ts, report/deliver.ts)
 ```
+
+Everything after the provider step is provider-agnostic: both Outlook and Gmail normalise their raw
+messages into the same `NormalisedEmail` shape ([`src/types.ts`](src/types.ts)) and implement the same
+`MailProvider` interface ([`src/providers/types.ts`](src/providers/types.ts)), selected at runtime via
+`getProvider()` ([`src/providers/index.ts`](src/providers/index.ts)).
 
 Orchestrated end to end by [`src/jobs/daily-report.ts`](src/jobs/daily-report.ts) and exposed as a CLI
 via [`src/index.ts`](src/index.ts).
@@ -38,29 +44,40 @@ cp .env.example .env
 
 Fill in `.env`:
 
-- `USER_EMAIL` / `MANAGER_EMAILS` — used by the deterministic scoring rules.
-- `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` — a Microsoft Entra ID app registration with delegated,
-  **read-only** permissions (`openid`, `profile`, `offline_access`, `User.Read`, `Mail.Read`). Enable
-  "Allow public client flows" so the device-code login works. Do not request `Mail.ReadWrite` or
-  `Mail.Send` — this version only reads mail. If your tenant requires admin consent that hasn't been
-  granted, the CLI fails clearly rather than trying another login path.
+- `USER_EMAIL` / `MANAGER_EMAILS` — used by the deterministic scoring rules (provider-agnostic).
 - `OPENAI_API_KEY` / `OPENAI_MODEL` — used for structured-output email classification.
+- For `--provider outlook`: `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` — a Microsoft Entra ID app
+  registration with delegated, **read-only** permissions (`openid`, `profile`, `offline_access`,
+  `User.Read`, `Mail.Read`). Enable "Allow public client flows" so the device-code login works. Do
+  not request `Mail.ReadWrite` or `Mail.Send`. If your tenant requires admin consent that hasn't been
+  granted (common for university tenants, which lock down third-party mailbox access as an
+  anti-consent-phishing control), the CLI fails clearly rather than trying another login path.
+- For `--provider gmail`: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — a Google Cloud OAuth client.
+  In [Google Cloud Console](https://console.cloud.google.com/): enable the Gmail API, configure the
+  OAuth consent screen (External, Testing mode is fine for personal use — add your own Gmail address
+  as a test user), then create an OAuth client ID of type **"TVs and Limited Input devices"** (this
+  is what enables the device flow used here). Grants only
+  `https://www.googleapis.com/auth/gmail.readonly`.
 
 ## Usage
 
 ```bash
 # Try the full pipeline without any credentials, using fixture data:
-npm run report:mock
+npm run report:mock:outlook
+npm run report:mock:gmail
 
-# Real run — reads Inbox messages since the last successful run (24h on first run):
-npm run report
+# Real run — reads Inbox messages since the last successful run for that provider (24h on first run):
+npm run report:outlook
+npm run report:gmail
 
 # Explicit window and output path:
-npm run start -- daily-report --since "24 hours" --output reports/today.md
+npm run start -- daily-report --provider gmail --since "24 hours" --output reports/gmail-today.md
 ```
 
-The first real run opens a device-code login (prints a URL + code to the console) and caches the
-refresh token in `data/token-cache.json`. Re-running reuses that token silently until it expires.
+The first real run for a provider opens a device-flow login (prints a URL + code to the console) and
+caches the refresh token locally (`data/outlook-token-cache.json` or `data/gmail-token-cache.json`).
+Re-running reuses that token silently until it expires. Outlook and Gmail have independent
+checkpoints and dedupe state, so running one doesn't affect the other's read progress.
 
 Re-running `--mock` after the first time will report 0 new emails — the fixture message IDs are
 already marked processed in `data/emails.db` (this is the same duplicate-prevention checkpoint used
@@ -107,7 +124,7 @@ score = urgency * 3
       + 15 if sender is a manager
       + 12 if sender is course admin
       + 5  if sent directly to you
-      + 5  if Microsoft importance is high
+      + 5  if importance flag is high (Outlook's Importance header, or Gmail's IMPORTANT label)
       - 30 if newsletter
       - 50 if spam
 ```
@@ -123,43 +140,50 @@ Ties break by score, then earlier deadline, then more recent received time.
 
 ## Privacy and safety
 
-- Read-only `Mail.Read` scope. No auto-reply, forward, move, or delete.
+- Read-only scope on both providers (`Mail.Read` / `gmail.readonly`). No auto-reply, forward, move,
+  or delete.
 - Full message bodies are never persisted — only the structured analysis (summary, category, score,
-  action, deadline) plus a link back to Outlook. See [`src/db/schema.ts`](src/db/schema.ts).
+  action, deadline) plus a link back to the provider's own web UI. See
+  [`src/db/schema.ts`](src/db/schema.ts).
 - Sensitive items (student welfare/health/academic integrity/complaints) are reduced in the report to
   "Sensitive student matter - manual review required." rather than including detail.
-- Tokens are cached locally in `data/token-cache.json`, which is gitignored. Encrypting that file at
-  rest is a TODO before any shared/production deployment (see the comment in
-  [`src/auth/microsoft.ts`](src/auth/microsoft.ts)).
+- Tokens are cached locally in `data/*-token-cache.json`, which is gitignored. Encrypting those files
+  at rest is a TODO before any shared/production deployment (see the comments in
+  [`src/providers/outlook/auth.ts`](src/providers/outlook/auth.ts) and
+  [`src/providers/gmail/auth.ts`](src/providers/gmail/auth.ts)).
 - **This version classifies, sorts, and summarises only.** It does not autonomously contact students
   or make decisions about extensions, marks, welfare, or misconduct.
 
 ## Status
 
 Implements roadmap phases 1–5 (connectivity, structured analysis, ranking, daily report,
-persistence/checkpointing) as a local CLI. Phase 6 (scheduled deployment) is not wired up yet — see
-`package.json`'s `report` script for the command to put behind a scheduler (cron, Azure Function
-timer, EventBridge + Lambda, or a scheduled GitHub Action).
+persistence/checkpointing) as a local CLI, for both Outlook and Gmail. Phase 6 (scheduled deployment)
+is not wired up yet — see `package.json`'s `report:outlook` / `report:gmail` scripts for the commands
+to put behind a scheduler (cron, Azure Function timer, EventBridge + Lambda, or a scheduled GitHub
+Action).
 
 ## Project structure
 
 ```
 src/
-  index.ts                   CLI entry (commander)
-  config.ts                  Env loading
-  types.ts                   EmailAnalysis schema (Zod) + shared types
-  auth/microsoft.ts          Device-code OAuth via MSAL, token cache
-  graph/messages.ts          Microsoft Graph fetch, pagination, retry
-  email/preprocess.ts        HTML->text, strip quoted history/disclaimers
-  email/classify.ts          OpenAI structured output + mock classifier
-  email/rules.ts             Deterministic sender-role helpers
-  email/priority.ts          Scoring formula, level, sort
-  report/generate.ts         Markdown report rendering
-  report/deliver.ts          Save report to disk
-  jobs/daily-report.ts       Pipeline orchestration
-  fixtures/sample-messages.ts Fixture data for --mock
-data/emails.db              SQLite: processed emails, checkpoints, errors (gitignored)
-reports/                    Generated Markdown reports (gitignored)
+  index.ts                    CLI entry (commander), --provider outlook|gmail
+  config.ts                   Env loading
+  types.ts                    EmailAnalysis schema (Zod) + shared types (NormalisedEmail, ScoredEmail)
+  lib/http.ts                 Shared fetch-with-retry (429/5xx, capped backoff)
+  providers/types.ts          MailProvider interface, ProviderName, FetchedItem
+  providers/index.ts          getProvider(name) registry
+  providers/outlook/          Device-code OAuth (MSAL), Graph fetch, raw->NormalisedEmail mapping
+  providers/gmail/            Device-flow OAuth, Gmail API fetch, MIME decode -> NormalisedEmail mapping
+  email/preprocess.ts         HTML->text, strip quoted history/disclaimers (shared by both providers)
+  email/classify.ts           OpenAI structured output + mock classifier
+  email/rules.ts              Deterministic sender-role helpers
+  email/priority.ts           Scoring formula, level, sort
+  report/generate.ts          Markdown report rendering
+  report/deliver.ts           Save report to disk
+  jobs/daily-report.ts        Pipeline orchestration, per-provider checkpointing
+  fixtures/sample-messages.ts Fixture data for --mock (provider-agnostic)
+data/emails.db               SQLite: processed emails, checkpoints, errors — scoped per provider (gitignored)
+reports/                     Generated Markdown reports, e.g. outlook-today.md / gmail-today.md (gitignored)
 ```
 
 ## References
@@ -167,4 +191,6 @@ reports/                    Generated Markdown reports (gitignored)
 - [Microsoft Graph — List messages](https://learn.microsoft.com/graph/api/user-list-messages)
 - [Microsoft identity platform OAuth](https://learn.microsoft.com/entra/identity-platform/v2-oauth2-auth-code-flow)
 - [Microsoft Graph change notifications](https://learn.microsoft.com/graph/change-notifications-overview)
+- [Gmail API — Users.messages](https://developers.google.com/gmail/api/reference/rest/v1/users.messages)
+- [Google OAuth 2.0 for TV and Limited-Input Device Applications](https://developers.google.com/identity/protocols/oauth2/limited-input-device)
 - [OpenAI Structured Outputs](https://platform.openai.com/docs/guides/structured-outputs)

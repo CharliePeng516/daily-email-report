@@ -34,6 +34,13 @@ export const config = {
     return requiredForRealRun('AZURE_TENANT_ID');
   },
 
+  get googleClientId(): string {
+    return requiredForRealRun('GOOGLE_CLIENT_ID');
+  },
+  get googleClientSecret(): string {
+    return requiredForRealRun('GOOGLE_CLIENT_SECRET');
+  },
+
   get openaiApiKey(): string {
     return requiredForRealRun('OPENAI_API_KEY');
   },

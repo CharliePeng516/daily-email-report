@@ -1,4 +1,5 @@
-import { getAccessToken } from '../auth/microsoft.js';
+import { fetchWithRetry } from '../../lib/http.js';
+import { getAccessToken } from './auth.js';
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
 
@@ -39,35 +40,13 @@ export interface GraphMessageRaw {
   webLink?: string;
 }
 
-const MAX_RETRIES = 4;
-
-async function fetchWithRetry(url: string, token: string, attempt = 1): Promise<Response> {
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-
-  const isTransient = res.status === 429 || res.status >= 500;
-  if (isTransient && attempt <= MAX_RETRIES) {
-    const retryAfterHeader = Number(res.headers.get('Retry-After'));
-    const delaySeconds = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
-      ? retryAfterHeader
-      : 2 ** attempt; // capped exponential backoff
-    await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000));
-    return fetchWithRetry(url, token, attempt + 1);
-  }
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Microsoft Graph request failed: ${res.status} ${res.statusText} ${body}`.trim());
-  }
-
-  return res;
-}
-
 /**
  * Fetches Inbox messages received since `sinceIso`, following
  * @odata.nextLink pagination until every matching message has been read.
  */
-export async function fetchMessagesSince(sinceIso: string): Promise<GraphMessageRaw[]> {
+export async function fetchGraphMessagesSince(sinceIso: string): Promise<GraphMessageRaw[]> {
   const token = await getAccessToken();
+  const headers = { Authorization: `Bearer ${token}` };
   const filter = `receivedDateTime ge ${sinceIso}`;
   let url: string | undefined =
     `${GRAPH_BASE}/me/mailFolders/inbox/messages` +
@@ -77,7 +56,7 @@ export async function fetchMessagesSince(sinceIso: string): Promise<GraphMessage
   const messages: GraphMessageRaw[] = [];
 
   while (url) {
-    const res = await fetchWithRetry(url, token);
+    const res = await fetchWithRetry(url, headers);
     const data = (await res.json()) as { value?: GraphMessageRaw[]; '@odata.nextLink'?: string };
     messages.push(...(data.value ?? []));
     url = data['@odata.nextLink'];
