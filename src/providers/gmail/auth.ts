@@ -1,4 +1,7 @@
+import { exec } from 'node:child_process';
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import path from 'node:path';
 import { config } from '../../config.js';
 
@@ -6,8 +9,16 @@ import { config } from '../../config.js';
 // gmail.modify / gmail.send here for v1 (see "8. Privacy and safety controls").
 const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
 
-const DEVICE_CODE_URL = 'https://oauth2.googleapis.com/device/code';
+// Google's OAuth device-authorization flow (used for the Outlook-style
+// "print a code, sign in elsewhere" UX) only supports a small scope allowlist
+// (openid/email/profile, Drive, YouTube) — Gmail scopes are rejected with
+// invalid_scope. Gmail requires the standard authorization-code flow instead,
+// via a loopback redirect (RFC 8252) — this needs a "Desktop app" OAuth
+// client in Google Cloud Console, not the "TVs and Limited Input devices"
+// type the device flow uses.
+const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const CACHE_PATH = path.join(DATA_DIR, 'gmail-token-cache.json');
@@ -33,72 +44,122 @@ function saveCache(cache: TokenCache): void {
   writeFileSync(CACHE_PATH, JSON.stringify(cache), { mode: 0o600 });
 }
 
-interface DeviceCodeResponse {
-  device_code: string;
-  user_code: string;
-  verification_url: string;
-  interval: number;
-  expires_in: number;
+function base64UrlEncode(buffer: Buffer): string {
+  return buffer.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-async function requestDeviceCode(): Promise<DeviceCodeResponse> {
-  const res = await fetch(DEVICE_CODE_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: config.googleClientId, scope: SCOPES.join(' ') }),
-  });
-  if (!res.ok) {
-    throw new Error(`Google device code request failed: ${res.status} ${await res.text()}`);
-  }
-  return res.json() as Promise<DeviceCodeResponse>;
+function generatePkcePair(): { verifier: string; challenge: string } {
+  const verifier = base64UrlEncode(randomBytes(32));
+  const challenge = base64UrlEncode(createHash('sha256').update(verifier).digest());
+  return { verifier, challenge };
 }
 
-interface TokenResponse {
-  access_token: string;
-  refresh_token?: string;
-  expires_in: number;
-  error?: string;
-  error_description?: string;
+function openInBrowser(url: string): void {
+  const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+  // Best-effort — the URL is always printed too, so a failure here isn't fatal.
+  exec(`${command} "${url}"`, () => {});
 }
 
-async function pollForToken(deviceCode: string, intervalSeconds: number, expiresInSeconds: number): Promise<TokenCache> {
-  const deadline = Date.now() + expiresInSeconds * 1000;
-  let interval = intervalSeconds;
+interface AuthorizationResult {
+  code: string;
+  redirectUri: string;
+}
 
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, interval * 1000));
+/**
+ * Starts a one-shot local HTTP server on a random loopback port, opens the
+ * Google consent screen in the user's browser, and resolves once Google
+ * redirects back with an authorization code.
+ */
+async function runLoopbackAuthorization(codeChallenge: string): Promise<AuthorizationResult> {
+  return new Promise((resolve, reject) => {
+    let redirectUri = '';
 
-    const res = await fetch(TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: config.googleClientId,
-        client_secret: config.googleClientSecret,
-        device_code: deviceCode,
-        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-      }),
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('Google sign-in timed out before you completed the browser flow.'));
+    }, LOGIN_TIMEOUT_MS);
+
+    const server = createServer((req, res) => {
+      const url = new URL(req.url ?? '/', redirectUri || 'http://127.0.0.1');
+      const code = url.searchParams.get('code');
+      const error = url.searchParams.get('error');
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+
+      if (error) {
+        res.end(`<p>Sign-in failed: ${error}. You can close this window.</p>`);
+        cleanup();
+        reject(new Error(`Google sign-in was denied or failed: ${error}`));
+        return;
+      }
+      if (!code) {
+        res.end('<p>No authorization code received. You can close this window.</p>');
+        return;
+      }
+
+      res.end('<p>Signed in - you can close this window and return to the terminal.</p>');
+      cleanup();
+      resolve({ code, redirectUri });
     });
 
-    const data = (await res.json()) as TokenResponse;
-
-    if (res.ok) {
-      return {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token ?? '',
-        expiresAt: Date.now() + data.expires_in * 1000,
-      };
+    function cleanup(): void {
+      clearTimeout(timeout);
+      server.close();
     }
 
-    if (data.error === 'authorization_pending') continue;
-    if (data.error === 'slow_down') {
-      interval += 5;
-      continue;
-    }
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+      redirectUri = `http://127.0.0.1:${port}`;
 
-    throw new Error(`Google sign-in failed: ${data.error ?? res.status} ${data.error_description ?? ''}`.trim());
+      const authUrl = new URL(AUTH_URL);
+      authUrl.searchParams.set('client_id', config.googleClientId);
+      authUrl.searchParams.set('redirect_uri', redirectUri);
+      authUrl.searchParams.set('response_type', 'code');
+      authUrl.searchParams.set('scope', SCOPES.join(' '));
+      authUrl.searchParams.set('access_type', 'offline');
+      authUrl.searchParams.set('prompt', 'consent');
+      authUrl.searchParams.set('code_challenge', codeChallenge);
+      authUrl.searchParams.set('code_challenge_method', 'S256');
+
+      console.log(`\nOpening your browser to sign in to Google. If it doesn't open, visit:\n${authUrl.toString()}\n`);
+      openInBrowser(authUrl.toString());
+    });
+  });
+}
+
+async function exchangeCodeForToken(code: string, redirectUri: string, codeVerifier: string): Promise<TokenCache> {
+  const res = await fetch(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: config.googleClientId,
+      client_secret: config.googleClientSecret,
+      code,
+      redirect_uri: redirectUri,
+      code_verifier: codeVerifier,
+      grant_type: 'authorization_code',
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Google token exchange failed: ${res.status} ${await res.text()}`);
   }
 
-  throw new Error('Google sign-in timed out before you approved access.');
+  const data = (await res.json()) as { access_token: string; refresh_token?: string; expires_in: number };
+  if (!data.refresh_token) {
+    throw new Error(
+      'Google did not return a refresh token. Revoke this app\'s access at ' +
+        'https://myaccount.google.com/permissions and sign in again — Google only issues a ' +
+        'refresh token on first consent for a given account.',
+    );
+  }
+
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    expiresAt: Date.now() + data.expires_in * 1000,
+  };
 }
 
 async function refreshAccessToken(refreshToken: string): Promise<TokenCache> {
@@ -117,7 +178,7 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenCache> {
     throw new Error(`Google token refresh failed: ${res.status} ${await res.text()}`);
   }
 
-  const data = (await res.json()) as TokenResponse;
+  const data = (await res.json()) as { access_token: string; refresh_token?: string; expires_in: number };
   return {
     accessToken: data.access_token,
     // Google usually omits refresh_token on a plain refresh — keep the old one.
@@ -128,9 +189,9 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenCache> {
 
 /**
  * Returns a valid Gmail access token, reusing the cached refresh token when
- * possible. Falls back to the OAuth device-authorization flow (RFC 8628) on
- * first run or once the refresh token expires — prints a verification URL +
- * code to the console, mirroring the Outlook device-code login.
+ * possible. Falls back to the loopback authorization-code flow (opens a
+ * browser tab, listens on a local port for the redirect) on first run or
+ * once the refresh token expires.
  */
 export async function getAccessToken(): Promise<string> {
   const cached = loadCache();
@@ -148,9 +209,9 @@ export async function getAccessToken(): Promise<string> {
     }
   }
 
-  const device = await requestDeviceCode();
-  console.log(`\nGo to ${device.verification_url} and enter code: ${device.user_code}\n`);
-  const token = await pollForToken(device.device_code, device.interval, device.expires_in);
+  const { verifier, challenge } = generatePkcePair();
+  const { code, redirectUri } = await runLoopbackAuthorization(challenge);
+  const token = await exchangeCodeForToken(code, redirectUri, verifier);
   saveCache(token);
   return token.accessToken;
 }

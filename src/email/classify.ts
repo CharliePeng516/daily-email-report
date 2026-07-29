@@ -11,6 +11,24 @@ otherwise return null. If the email discusses an individual student's health, we
 integrity, special consideration, or another sensitive personal matter, set sensitive to true and keep \
 "summary" free of identifying detail (e.g. "Sensitive student matter - manual review required.").`;
 
+// Only needed for the JSON-mode fallback below — providers with OpenAI's strict
+// json_schema mode (config.llmSupportsStrictJsonSchema) get this enforced by the
+// API itself instead, via zodResponseFormat.
+const JSON_SCHEMA_INSTRUCTIONS = `Return ONLY a single JSON object (no prose, no markdown fences) with exactly these fields:
+{
+  "category": "urgent_action" | "student_issue" | "teaching_admin" | "meeting" | "deadline" | "announcement" | "newsletter" | "spam" | "other",
+  "summary": string,
+  "actionRequired": boolean,
+  "action": string | null,
+  "deadline": string | null,      // ISO 8601 date-time, or null if none stated
+  "urgency": number,              // 0-10
+  "importance": number,           // 0-10
+  "senderRole": "manager" | "course_admin" | "colleague" | "student" | "university_system" | "unknown",
+  "sensitive": boolean,
+  "confidence": number,           // 0-1
+  "reasons": string[]
+}`;
+
 function buildUserPrompt(email: NormalisedEmail): string {
   return [
     `From: ${email.fromName} <${email.fromAddress}>`,
@@ -26,13 +44,14 @@ function buildUserPrompt(email: NormalisedEmail): string {
 
 let client: OpenAI | undefined;
 function getClient(): OpenAI {
-  client ??= new OpenAI({ apiKey: config.openaiApiKey });
+  client ??= new OpenAI({ apiKey: config.llmApiKey, baseURL: config.llmBaseUrl || undefined });
   return client;
 }
 
-export async function classifyEmail(email: NormalisedEmail): Promise<EmailAnalysis> {
+// OpenAI's grammar-constrained structured outputs — guarantees the response matches EmailAnalysisSchema.
+async function classifyStrict(email: NormalisedEmail): Promise<EmailAnalysis> {
   const completion = await getClient().beta.chat.completions.parse({
-    model: config.openaiModel,
+    model: config.llmModel,
     temperature: 0,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -43,11 +62,46 @@ export async function classifyEmail(email: NormalisedEmail): Promise<EmailAnalys
 
   const parsed = completion.choices[0]?.message?.parsed;
   if (!parsed) {
-    throw new Error(`OpenAI returned no structured result for message ${email.id}`);
+    throw new Error(`${config.llmProvider} returned no structured result for message ${email.id}`);
   }
 
   // Belt-and-braces: re-validate even though the API enforced the schema.
   return EmailAnalysisSchema.parse(parsed);
+}
+
+// Plain JSON mode for providers without strict schema enforcement (e.g. DeepSeek) —
+// the model is only asked nicely via JSON_SCHEMA_INSTRUCTIONS, so a shape mismatch
+// is possible. EmailAnalysisSchema.parse() throws in that case, which the caller
+// (jobs/daily-report.ts) already treats as a per-message processing error rather
+// than aborting the run.
+async function classifyJsonMode(email: NormalisedEmail): Promise<EmailAnalysis> {
+  const completion = await getClient().chat.completions.create({
+    model: config.llmModel,
+    temperature: 0,
+    messages: [
+      { role: 'system', content: `${SYSTEM_PROMPT}\n\n${JSON_SCHEMA_INSTRUCTIONS}` },
+      { role: 'user', content: buildUserPrompt(email) },
+    ],
+    response_format: { type: 'json_object' },
+  });
+
+  const content = completion.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error(`${config.llmProvider} returned no content for message ${email.id}`);
+  }
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(content);
+  } catch {
+    throw new Error(`${config.llmProvider} returned invalid JSON for message ${email.id}`);
+  }
+
+  return EmailAnalysisSchema.parse(raw);
+}
+
+export async function classifyEmail(email: NormalisedEmail): Promise<EmailAnalysis> {
+  return config.llmSupportsStrictJsonSchema ? classifyStrict(email) : classifyJsonMode(email);
 }
 
 const KEYWORD_RULES: Array<{ pattern: RegExp; analysis: Partial<EmailAnalysis> }> = [

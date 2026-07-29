@@ -45,7 +45,12 @@ cp .env.example .env
 Fill in `.env`:
 
 - `USER_EMAIL` / `MANAGER_EMAILS` — used by the deterministic scoring rules (provider-agnostic).
-- `OPENAI_API_KEY` / `OPENAI_MODEL` — used for structured-output email classification.
+- `LLM_PROVIDER` — `openai` (default) or `deepseek`, then the matching API key
+  (`OPENAI_API_KEY` or `DEEPSEEK_API_KEY`). DeepSeek's API is OpenAI-compatible and considerably
+  cheaper, but only offers plain JSON mode rather than OpenAI's strict schema-enforced structured
+  outputs — see the comment in [`src/email/classify.ts`](src/email/classify.ts). A schema mismatch
+  from DeepSeek is treated as a per-message processing error (reported in the daily report), not a
+  crash. `LLM_MODEL` / `LLM_BASE_URL` are optional overrides; each provider has a sensible default.
 - For `--provider outlook`: `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` — a Microsoft Entra ID app
   registration with delegated, **read-only** permissions (`openid`, `profile`, `offline_access`,
   `User.Read`, `Mail.Read`). Enable "Allow public client flows" so the device-code login works. Do
@@ -55,8 +60,9 @@ Fill in `.env`:
 - For `--provider gmail`: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — a Google Cloud OAuth client.
   In [Google Cloud Console](https://console.cloud.google.com/): enable the Gmail API, configure the
   OAuth consent screen (External, Testing mode is fine for personal use — add your own Gmail address
-  as a test user), then create an OAuth client ID of type **"TVs and Limited Input devices"** (this
-  is what enables the device flow used here). Grants only
+  as a test user), then create an OAuth client ID of type **"Desktop app"**. (Not "TVs and Limited
+  Input devices" — Google's device-code flow only supports a small scope allowlist that excludes
+  Gmail entirely, so that client type can't be used here.) Grants only
   `https://www.googleapis.com/auth/gmail.readonly`.
 
 ## Usage
@@ -74,9 +80,11 @@ npm run report:gmail
 npm run start -- daily-report --provider gmail --since "24 hours" --output reports/gmail-today.md
 ```
 
-The first real run for a provider opens a device-flow login (prints a URL + code to the console) and
-caches the refresh token locally (`data/outlook-token-cache.json` or `data/gmail-token-cache.json`).
-Re-running reuses that token silently until it expires. Outlook and Gmail have independent
+The first real run for a provider opens an interactive login and caches the refresh token locally
+(`data/outlook-token-cache.json` or `data/gmail-token-cache.json`). Outlook uses a device-code login
+(prints a URL + code to the console); Gmail opens a browser tab and listens on a local port for the
+redirect (standard OAuth loopback flow — Gmail scopes aren't available via device-code). Re-running
+reuses the cached token silently until it expires. Outlook and Gmail have independent
 checkpoints and dedupe state, so running one doesn't affect the other's read progress.
 
 Re-running `--mock` after the first time will report 0 new emails — the fixture message IDs are
@@ -192,5 +200,6 @@ reports/                     Generated Markdown reports, e.g. outlook-today.md /
 - [Microsoft identity platform OAuth](https://learn.microsoft.com/entra/identity-platform/v2-oauth2-auth-code-flow)
 - [Microsoft Graph change notifications](https://learn.microsoft.com/graph/change-notifications-overview)
 - [Gmail API — Users.messages](https://developers.google.com/gmail/api/reference/rest/v1/users.messages)
-- [Google OAuth 2.0 for TV and Limited-Input Device Applications](https://developers.google.com/identity/protocols/oauth2/limited-input-device)
+- [Google OAuth 2.0 for Desktop apps (loopback redirect)](https://developers.google.com/identity/protocols/oauth2/native-app)
 - [OpenAI Structured Outputs](https://platform.openai.com/docs/guides/structured-outputs)
+- [DeepSeek API — JSON mode](https://api-docs.deepseek.com/guides/json_mode)
