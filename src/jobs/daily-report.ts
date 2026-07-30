@@ -2,6 +2,7 @@ import { getCheckpoint, isAlreadyProcessed, saveProcessedEmail, saveProcessingEr
 import { isAlreadyProcessedMock, markProcessedMock } from '../db/mock-store.js';
 import { classifyEmail, classifyEmailMock } from '../email/classify.js';
 import { levelForScore, scoreEmail, sortByPriority } from '../email/priority.js';
+import { prefilterEmail } from '../email/prefilter.js';
 import { getSampleMessages } from '../fixtures/sample-messages.js';
 import { getProvider, type FetchedItem, type ProviderName } from '../providers/index.js';
 import { generateMarkdownReport } from '../report/generate.js';
@@ -55,7 +56,7 @@ async function resolveSince(since: string | undefined, provider: ProviderName, m
 }
 
 async function classify(email: NormalisedEmail, mock: boolean) {
-  const analysis = mock ? classifyEmailMock(email) : await classifyEmail(email);
+  const analysis = mock ? classifyEmailMock(email) : prefilterEmail(email) ?? (await classifyEmail(email));
   const score = scoreEmail(email, analysis);
   const level = levelForScore(score);
   return { email, analysis, score, level } satisfies ScoredEmail;
@@ -71,14 +72,22 @@ export async function runDailyReport(options: RunOptions): Promise<RunResult> {
   const runAt = new Date();
   const sinceIso = await resolveSince(options.since, options.provider, options.mock);
 
+  if (!options.mock) {
+    console.log(`Fetching ${options.provider} messages since ${sinceIso}...`);
+  }
+
   const fetched: FetchedItem[] = options.mock
     ? getSampleMessages().map((email): FetchedItem => ({ ok: true, email }))
     : await getProvider(options.provider).fetchMessagesSince(sinceIso);
 
+  if (!options.mock) {
+    console.log(`Fetched ${fetched.length} message(s). Classifying...`);
+  }
+
   const scored: ScoredEmail[] = [];
   const errors: ProcessingError[] = [];
 
-  for (const item of fetched) {
+  for (const [index, item] of fetched.entries()) {
     if (!item.ok) {
       const error: ProcessingError = { messageId: item.id, subject: item.subject, error: item.error };
       errors.push(error);
@@ -89,7 +98,15 @@ export async function runDailyReport(options: RunOptions): Promise<RunResult> {
     const alreadyProcessed = options.mock
       ? isAlreadyProcessedMock(options.provider, item.email.id)
       : await isAlreadyProcessed(options.provider, item.email.id);
-    if (alreadyProcessed) continue;
+    if (alreadyProcessed) {
+      if (!options.mock) console.log(`  [${index + 1}/${fetched.length}] already processed - ${item.email.subject}`);
+      continue;
+    }
+
+    const prefiltered = !options.mock && prefilterEmail(item.email) !== null;
+    if (!options.mock) {
+      console.log(`  [${index + 1}/${fetched.length}] ${prefiltered ? '(filtered) ' : ''}${item.email.subject}`);
+    }
 
     try {
       const scoredItem = await classify(item.email, options.mock);

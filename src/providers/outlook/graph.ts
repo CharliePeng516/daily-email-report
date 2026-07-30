@@ -60,7 +60,9 @@ export async function fetchGraphMessagesSince(sinceIso: string): Promise<GraphMe
     const data = (await res.json()) as { value?: GraphMessageRaw[]; '@odata.nextLink'?: string };
     messages.push(...(data.value ?? []));
     url = data['@odata.nextLink'];
+    if (url) console.log(`  fetched ${messages.length} message(s) so far, more pages remain...`);
   }
 
+  console.log(`Found ${messages.length} Outlook message(s) in range.`);
   return messages;
 }

@@ -64,8 +64,13 @@ async function getMessage(id: string): Promise<GmailMessageRaw> {
  */
 export async function fetchGmailMessagesSince(sinceIso: string): Promise<GmailMessageRaw[]> {
   const ids = await listMessageIds(sinceIso);
+  console.log(`Found ${ids.length} Gmail message(s) in range. Fetching details...`);
+
   const messages: GmailMessageRaw[] = [];
-  for (const id of ids) {
+  for (const [index, id] of ids.entries()) {
+    if (ids.length > 5 && (index + 1) % 5 === 0) {
+      console.log(`  fetched ${index + 1}/${ids.length}...`);
+    }
     messages.push(await getMessage(id));
   }
   return messages;
