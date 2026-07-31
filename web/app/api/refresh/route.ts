@@ -19,6 +19,9 @@ const LOG_DIR = path.join(CLI_ROOT, 'data');
 // local-dev guard against double-clicks; not meant to be a durable lock.
 const inFlight = new Set<string>();
 
+const MIN_SINCE_DAYS = 1;
+const MAX_SINCE_DAYS = 90;
+
 export async function POST(request: Request): Promise<NextResponse> {
   let body: unknown;
   try {
@@ -30,6 +33,19 @@ export async function POST(request: Request): Promise<NextResponse> {
   const provider = (body as { provider?: unknown })?.provider;
   if (provider !== 'outlook' && provider !== 'gmail') {
     return NextResponse.json({ error: 'provider must be "outlook" or "gmail".' }, { status: 400 });
+  }
+
+  const sinceDaysRaw = (body as { sinceDays?: unknown })?.sinceDays;
+  let sinceDays: number | undefined;
+  if (sinceDaysRaw !== undefined && sinceDaysRaw !== null) {
+    const parsed = Number(sinceDaysRaw);
+    if (!Number.isInteger(parsed) || parsed < MIN_SINCE_DAYS || parsed > MAX_SINCE_DAYS) {
+      return NextResponse.json(
+        { error: `sinceDays must be a whole number between ${MIN_SINCE_DAYS} and ${MAX_SINCE_DAYS}.` },
+        { status: 400 },
+      );
+    }
+    sinceDays = parsed;
   }
 
   if (!existsSync(path.join(CLI_ROOT, 'src', 'index.ts')) || !existsSync(TSX_BIN)) {
@@ -47,20 +63,35 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ status: 'already-running' });
   }
 
-  mkdirSync(LOG_DIR, { recursive: true });
-  const logPath = path.join(LOG_DIR, `refresh-${provider}.log`);
-  const logFd = openSync(logPath, 'a');
+  try {
+    mkdirSync(LOG_DIR, { recursive: true });
+    const logPath = path.join(LOG_DIR, `refresh-${provider}.log`);
+    const logFd = openSync(logPath, 'a');
 
-  inFlight.add(provider);
-  const child = spawn(TSX_BIN, ['src/index.ts', 'daily-report', '--provider', provider], {
-    cwd: CLI_ROOT,
-    detached: true,
-    stdio: ['ignore', logFd, logFd],
-  });
-  child.on('exit', () => inFlight.delete(provider));
-  child.unref();
+    const args = ['src/index.ts', 'daily-report', '--provider', provider];
+    // Omitting --since keeps the CLI's own default: resume from the last
+    // successful checkpoint (or 24h on first run) — see jobs/daily-report.ts.
+    if (sinceDays !== undefined) args.push('--since', `${sinceDays} days`);
 
-  return NextResponse.json({ status: 'started', logPath: `data/refresh-${provider}.log` });
+    inFlight.add(provider);
+    const child = spawn(TSX_BIN, args, {
+      cwd: CLI_ROOT,
+      detached: true,
+      stdio: ['ignore', logFd, logFd],
+    });
+    child.on('exit', () => inFlight.delete(provider));
+    child.on('error', () => inFlight.delete(provider));
+    child.unref();
+
+    return NextResponse.json({ status: 'started', logPath: `data/refresh-${provider}.log`, sinceDays });
+  } catch (err) {
+    inFlight.delete(provider);
+    console.error('Failed to start refresh job:', err);
+    return NextResponse.json(
+      { error: `Could not start the fetch job: ${err instanceof Error ? err.message : String(err)}` },
+      { status: 500 },
+    );
+  }
 }
 
 export async function GET(): Promise<NextResponse> {

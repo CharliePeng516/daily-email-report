@@ -29,7 +29,7 @@ export default async function HomePage({
 }) {
   const params = await searchParams;
   const provider: ProviderName = params.provider === 'gmail' ? 'gmail' : 'outlook';
-  const days = Math.max(1, Math.min(14, Number(params.days) || 2));
+  const days = Math.max(1, Math.min(90, Number(params.days) || 2));
 
   const { items, errors, lastRunAt } = await getDashboardData(provider, days);
 
@@ -53,7 +53,7 @@ export default async function HomePage({
             {formatLastRun(lastRunAt)} · last {days} day{days === 1 ? '' : 's'}
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center">
-            <RefreshButton provider={provider} />
+            <RefreshButton provider={provider} days={days} />
             <DaysSelect days={days} />
           </Stack>
         </Stack>
