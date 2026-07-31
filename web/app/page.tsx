@@ -8,7 +8,7 @@ import LogoutButton from '../components/LogoutButton';
 import ProviderTabs from '../components/ProviderTabs';
 import RefreshButton from '../components/RefreshButton';
 import ReportView from '../components/ReportView';
-import SummaryStats from '../components/SummaryStats';
+import AnalyticsSection from '../components/AnalyticsSection';
 
 // Never statically cache — this dashboard reflects whatever the CLI most
 // recently wrote to Postgres, so every request should query fresh.
@@ -60,7 +60,7 @@ export default async function HomePage({
 
         <ErrorsPanel errors={errors} />
         <ActionList items={items} />
-        <SummaryStats items={items} />
+        <AnalyticsSection items={items} days={days} />
 
         {items.length === 0 ? (
           <Typography color="text.secondary">Nothing here yet — run the CLI for this provider to populate it.</Typography>
