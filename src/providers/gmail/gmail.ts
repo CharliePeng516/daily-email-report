@@ -1,4 +1,5 @@
 import { fetchWithRetry } from '../../lib/http.js';
+import { renderProgress } from '../../lib/progress.js';
 import { getAccessToken } from './auth.js';
 
 const GMAIL_BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
@@ -68,9 +69,7 @@ export async function fetchGmailMessagesSince(sinceIso: string): Promise<GmailMe
 
   const messages: GmailMessageRaw[] = [];
   for (const [index, id] of ids.entries()) {
-    if (ids.length > 5 && (index + 1) % 5 === 0) {
-      console.log(`  fetched ${index + 1}/${ids.length}...`);
-    }
+    renderProgress(index + 1, ids.length, 'fetching message details');
     messages.push(await getMessage(id));
   }
   return messages;

@@ -4,6 +4,7 @@ import { classifyEmail, classifyEmailMock } from '../email/classify.js';
 import { levelForScore, scoreEmail, sortByPriority } from '../email/priority.js';
 import { prefilterEmail } from '../email/prefilter.js';
 import { getSampleMessages } from '../fixtures/sample-messages.js';
+import { renderProgress } from '../lib/progress.js';
 import { getProvider, type FetchedItem, type ProviderName } from '../providers/index.js';
 import { generateMarkdownReport } from '../report/generate.js';
 import { saveReport } from '../report/deliver.js';
@@ -86,8 +87,12 @@ export async function runDailyReport(options: RunOptions): Promise<RunResult> {
 
   const scored: ScoredEmail[] = [];
   const errors: ProcessingError[] = [];
+  let aiCalls = 0;
+  let filteredCount = 0;
 
   for (const [index, item] of fetched.entries()) {
+    if (!options.mock) renderProgress(index + 1, fetched.length, item.ok ? item.email.subject : item.subject);
+
     if (!item.ok) {
       const error: ProcessingError = { messageId: item.id, subject: item.subject, error: item.error };
       errors.push(error);
@@ -98,15 +103,10 @@ export async function runDailyReport(options: RunOptions): Promise<RunResult> {
     const alreadyProcessed = options.mock
       ? isAlreadyProcessedMock(options.provider, item.email.id)
       : await isAlreadyProcessed(options.provider, item.email.id);
-    if (alreadyProcessed) {
-      if (!options.mock) console.log(`  [${index + 1}/${fetched.length}] already processed - ${item.email.subject}`);
-      continue;
-    }
+    if (alreadyProcessed) continue;
 
-    const prefiltered = !options.mock && prefilterEmail(item.email) !== null;
-    if (!options.mock) {
-      console.log(`  [${index + 1}/${fetched.length}] ${prefiltered ? '(filtered) ' : ''}${item.email.subject}`);
-    }
+    if (!options.mock && prefilterEmail(item.email) !== null) filteredCount += 1;
+    else if (!options.mock) aiCalls += 1;
 
     try {
       const scoredItem = await classify(item.email, options.mock);
@@ -125,6 +125,10 @@ export async function runDailyReport(options: RunOptions): Promise<RunResult> {
       errors.push(error);
       if (!options.mock) await saveProcessingError(options.provider, error, runAt.toISOString());
     }
+  }
+
+  if (!options.mock) {
+    console.log(`Classified ${aiCalls} via AI, skipped AI for ${filteredCount} filtered as low-priority.`);
   }
 
   const sorted = sortByPriority(scored);

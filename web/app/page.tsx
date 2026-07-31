@@ -7,6 +7,7 @@ import ErrorsPanel from '../components/ErrorsPanel';
 import LogoutButton from '../components/LogoutButton';
 import PriorityLevelSection from '../components/PriorityLevelSection';
 import ProviderTabs from '../components/ProviderTabs';
+import RefreshButton from '../components/RefreshButton';
 import { LEVEL_ORDER } from '../components/level-styles';
 
 // Never statically cache — this dashboard reflects whatever the CLI most
@@ -63,7 +64,10 @@ export default async function HomePage({
               {items.length} email{items.length === 1 ? '' : 's'} in the last {days} day{days === 1 ? '' : 's'}
             </Typography>
           </Stack>
-          <DaysSelect days={days} />
+          <Stack direction="row" spacing={1} alignItems="center">
+            <RefreshButton provider={provider} />
+            <DaysSelect days={days} />
+          </Stack>
         </Stack>
 
         <ErrorsPanel errors={errors} />
