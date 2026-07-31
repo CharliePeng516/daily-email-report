@@ -30,11 +30,11 @@ export default function GroupSection({
     <Box component="section" sx={{ mb: 4 }}>
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
         <Icon
-          sx={(theme) => ({
+          sx={{
             fontSize: 20,
             color: light,
-            ...theme.applyStyles('dark', { color: dark ?? light }),
-          })}
+            '@media (prefers-color-scheme: dark)': { color: dark ?? light },
+          }}
         />
         <Typography variant="h6" component="h2">
           {title} <Typography component="span" color="text.secondary">({items.length})</Typography>

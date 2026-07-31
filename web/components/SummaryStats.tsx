@@ -50,12 +50,12 @@ export default function SummaryStats({ items }: { items: ReportItem[] }) {
               <Box
                 key={category}
                 title={`${meta.label}: ${count} (${Math.round(pct)}%)`}
-                sx={(theme) => ({
+                sx={{
                   width: `${pct}%`,
                   minWidth: 3,
                   bgcolor: meta.light,
-                  ...theme.applyStyles('dark', { bgcolor: meta.dark }),
-                })}
+                  '@media (prefers-color-scheme: dark)': { bgcolor: meta.dark },
+                }}
               />
             );
           })}
@@ -67,13 +67,13 @@ export default function SummaryStats({ items }: { items: ReportItem[] }) {
             return (
               <Stack key={category} direction="row" spacing={0.5} alignItems="center">
                 <Box
-                  sx={(theme) => ({
+                  sx={{
                     width: 8,
                     height: 8,
                     borderRadius: '50%',
                     bgcolor: meta.light,
-                    ...theme.applyStyles('dark', { bgcolor: meta.dark }),
-                  })}
+                    '@media (prefers-color-scheme: dark)': { bgcolor: meta.dark },
+                  }}
                 />
                 <Typography variant="caption" color="text.secondary">
                   {meta.label} ({counts.get(category)})

@@ -22,11 +22,11 @@ export default function DetailedItemCard({ item }: { item: ReportItem }) {
   return (
     <Card
       variant="outlined"
-      sx={(theme) => ({
+      sx={{
         borderLeftWidth: 4,
         borderLeftColor: category.light,
-        ...theme.applyStyles('dark', { borderLeftColor: category.dark }),
-      })}
+        '@media (prefers-color-scheme: dark)': { borderLeftColor: category.dark },
+      }}
     >
       <CardContent>
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
