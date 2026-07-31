@@ -1,8 +1,10 @@
-import { Card, CardContent, Chip, Link as MuiLink, Stack, Typography } from '@mui/material';
+import { Card, CardContent, Link as MuiLink, Stack, Typography } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import EventIcon from '@mui/icons-material/Event';
 import type { ReportItem } from '../lib/queries';
-import { LEVEL_COLOR } from './level-styles';
+import { getCategoryMeta } from './category-styles';
+import CategoryBadge from './CategoryBadge';
+import PriorityBadge from './PriorityBadge';
 
 function formatDateTime(date: Date): string {
   return new Intl.DateTimeFormat('en-AU', {
@@ -15,19 +17,31 @@ function formatDateTime(date: Date): string {
 }
 
 export default function DetailedItemCard({ item }: { item: ReportItem }) {
+  const category = getCategoryMeta(item.category);
+
   return (
-    <Card variant="outlined">
+    <Card
+      variant="outlined"
+      sx={(theme) => ({
+        borderLeftWidth: 4,
+        borderLeftColor: category.light,
+        ...theme.applyStyles('dark', { borderLeftColor: category.dark }),
+      })}
+    >
       <CardContent>
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
           <Typography variant="subtitle1" fontWeight={600}>
             {item.subject}
           </Typography>
-          <Chip label={`Priority ${item.score}`} color={LEVEL_COLOR[item.level]} size="small" />
+          <PriorityBadge level={item.level} score={item.score} />
         </Stack>
 
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          From {item.senderAddress}
-        </Typography>
+        <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" sx={{ mt: 0.5 }}>
+          <CategoryBadge category={item.category} />
+          <Typography variant="body2" color="text.secondary">
+            From {item.senderAddress}
+          </Typography>
+        </Stack>
 
         <Typography variant="body2" sx={{ mt: 1.5 }}>
           {item.summary}

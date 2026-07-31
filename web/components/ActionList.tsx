@@ -1,5 +1,6 @@
 import { Card, CardContent, Checkbox, List, ListItem, ListItemIcon, ListItemText, Typography } from '@mui/material';
 import type { ReportItem } from '../lib/queries';
+import CategoryBadge from './CategoryBadge';
 
 export default function ActionList({ items }: { items: ReportItem[] }) {
   const actionable = items.filter(
@@ -16,11 +17,15 @@ export default function ActionList({ items }: { items: ReportItem[] }) {
         </Typography>
         <List disablePadding>
           {actionable.map((item) => (
-            <ListItem key={item.messageId} disableGutters sx={{ py: 0.25 }}>
+            <ListItem key={item.messageId} disableGutters sx={{ py: 0.25, alignItems: 'flex-start' }}>
               <ListItemIcon sx={{ minWidth: 36 }}>
                 <Checkbox edge="start" disabled sx={{ p: 0 }} />
               </ListItemIcon>
-              <ListItemText primary={item.sensitive ? item.summary : item.action ?? item.subject} />
+              <ListItemText
+                primary={item.sensitive ? item.summary : item.action ?? item.subject}
+                secondary={<CategoryBadge category={item.category} size="small" />}
+                slotProps={{ secondary: { component: 'div', sx: { mt: 0.25 } } }}
+              />
             </ListItem>
           ))}
         </List>
