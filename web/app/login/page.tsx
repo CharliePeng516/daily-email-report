@@ -24,7 +24,7 @@ export default async function LoginPage({
         <Stack spacing={2} alignItems="center" sx={{ mb: 3 }}>
           <MailLockIcon color="primary" sx={{ fontSize: 40 }} />
           <Typography variant="h6" component="h1">
-            School Email Report
+            Daily Email Report
           </Typography>
           <Typography variant="body2" color="text.secondary" textAlign="center">
             This dashboard shows personal inbox summaries — enter the access password to continue.

@@ -3,13 +3,13 @@ import { zodResponseFormat } from 'openai/helpers/zod';
 import { config } from '../config.js';
 import { EmailAnalysisSchema, type EmailAnalysis, type NormalisedEmail } from '../types.js';
 
-const SYSTEM_PROMPT = `You are a triage assistant for a university staff member's inbox. \
+const SYSTEM_PROMPT = `You are a triage assistant for someone's personal email inbox. \
 Analyse ONE email at a time and return a structured assessment only — never a free-form paragraph. \
 Be conservative: only set actionRequired to true when the sender is explicitly asking the recipient \
 to do something. Only fill "deadline" when the email states or clearly implies a specific date/time; \
-otherwise return null. If the email discusses an individual student's health, welfare, academic \
-integrity, special consideration, or another sensitive personal matter, set sensitive to true and keep \
-"summary" free of identifying detail (e.g. "Sensitive student matter - manual review required.").`;
+otherwise return null. If the email discusses someone's health, welfare, or another sensitive personal \
+matter, set sensitive to true and keep "summary" free of identifying detail (e.g. "Sensitive personal \
+matter - manual review required.").`;
 
 // Only needed for the JSON-mode fallback below — providers with OpenAI's strict
 // json_schema mode (config.llmSupportsStrictJsonSchema) get this enforced by the
@@ -187,7 +187,7 @@ export function classifyEmailMock(email: NormalisedEmail): EmailAnalysis {
   const merged = { ...base, ...matched?.analysis };
 
   if (merged.sensitive) {
-    merged.summary = 'Sensitive student matter - manual review required.';
+    merged.summary = 'Sensitive personal matter - manual review required.';
   }
   if (merged.actionRequired && !merged.action) {
     merged.action = `Review: ${email.subject}`;

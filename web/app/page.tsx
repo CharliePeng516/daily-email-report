@@ -39,7 +39,7 @@ export default async function HomePage({
         <Toolbar sx={{ gap: 1 }}>
           <MailLockIcon color="primary" />
           <Typography variant="h6" component="h1" sx={{ flexGrow: 1 }}>
-            School Email Report
+            {provider === 'gmail' ? 'Daily Email Report' : 'School Email Report'}
           </Typography>
           <LogoutButton />
         </Toolbar>

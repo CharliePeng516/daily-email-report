@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import type { ProviderName } from '../providers/index.js';
 import type { PriorityLevel, ProcessingError, ScoredEmail } from '../types.js';
 
 export interface ReportInput {
@@ -6,7 +7,21 @@ export interface ReportInput {
   processedCount: number;
   items: ScoredEmail[];
   errors: ProcessingError[];
+  provider: ProviderName;
 }
+
+// Outlook implies a university/school mailbox (the original UNSW use case);
+// Gmail is a personal inbox — see src/email/classify.ts for the same split
+// in the classification prompt's framing.
+const REPORT_TITLE: Record<ProviderName, string> = {
+  outlook: 'SCHOOL EMAIL DAILY REPORT',
+  gmail: 'DAILY EMAIL REPORT',
+};
+
+const PROVIDER_LABEL: Record<ProviderName, string> = {
+  outlook: 'Outlook',
+  gmail: 'Gmail',
+};
 
 function formatRunDate(date: Date): string {
   return new Intl.DateTimeFormat('en-AU', {
@@ -40,9 +55,10 @@ function groupByLevel(items: ScoredEmail[]): Record<PriorityLevel, ScoredEmail[]
 
 // Critical/High get a full breakdown (subject, sender, score, action, deadline, link) —
 // these are the items the reader will actually act on.
-function renderDetailedSection(title: string, items: ScoredEmail[]): string[] {
+function renderDetailedSection(title: string, items: ScoredEmail[], provider: ProviderName): string[] {
   if (items.length === 0) return [];
   const lines = [`## ${title} - ${items.length}`, ''];
+  const linkLabel = `${PROVIDER_LABEL[provider]} link`;
 
   items.forEach((item, index) => {
     lines.push(`${index + 1}. ${item.email.subject}`);
@@ -58,7 +74,7 @@ function renderDetailedSection(title: string, items: ScoredEmail[]): string[] {
 
     const deadline = formatDeadline(item.analysis.deadline);
     if (deadline) lines.push(`   Deadline: ${deadline}`);
-    if (item.email.webLink) lines.push(`   Open: [Outlook link](${item.email.webLink})`);
+    if (item.email.webLink) lines.push(`   Open: [${linkLabel}](${item.email.webLink})`);
     lines.push('');
   });
 
@@ -97,17 +113,17 @@ function renderActionList(items: ScoredEmail[]): string[] {
 }
 
 export function generateMarkdownReport(input: ReportInput): string {
-  const { generatedAt, processedCount, items, errors } = input;
+  const { generatedAt, processedCount, items, errors, provider } = input;
   const groups = groupByLevel(items);
 
   const lines: string[] = [
-    '# SCHOOL EMAIL DAILY REPORT',
+    `# ${REPORT_TITLE[provider]}`,
     formatRunDate(generatedAt),
     '',
     `Processed: ${processedCount} emails`,
     '',
-    ...renderDetailedSection('CRITICAL', groups.Critical),
-    ...renderDetailedSection('HIGH', groups.High),
+    ...renderDetailedSection('CRITICAL', groups.Critical, provider),
+    ...renderDetailedSection('HIGH', groups.High, provider),
     ...renderSummarySection('MEDIUM', groups.Medium),
     ...renderSummarySection('LOW', groups.Low),
     ...renderActionList(items),

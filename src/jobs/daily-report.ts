@@ -138,6 +138,7 @@ export async function runDailyReport(options: RunOptions): Promise<RunResult> {
     processedCount: fetched.length,
     items: sorted,
     errors,
+    provider: options.provider,
   });
 
   const outputPath = saveReport(markdown, options.output);

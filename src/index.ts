@@ -8,7 +8,7 @@ const program = new Command();
 
 program
   .name('daily-email-report')
-  .description('Read-first AI agent that scans a school mailbox and generates a daily priority report.');
+  .description('Read-first AI agent that scans your inbox and generates a daily priority report.');
 
 program
   .command('daily-report')

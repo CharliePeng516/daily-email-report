@@ -1,6 +1,6 @@
 # daily-email-report
 
-Scan daily email from a school mailbox, auto filter and sort messages by importance, and generate a
+Scan daily email from your inbox, auto filter and sort messages by importance, and generate a
 concise daily report — as a live web dashboard, not just a file. Supports two mailbox providers —
 **Outlook** (Microsoft Graph) and **Gmail** — behind the same pipeline.
 
@@ -148,6 +148,10 @@ Provider tabs switch between Outlook and Gmail.
    itself never fetches from Outlook/Gmail.
 
 ## Report format (dashboard and Markdown copy)
+
+The Markdown header and provider-link label switch with the mailbox: `SCHOOL EMAIL DAILY REPORT` /
+"Outlook link" for Outlook, `DAILY EMAIL REPORT` / "Gmail link" for Gmail (see
+[`src/report/generate.ts`](src/report/generate.ts)). Example (Outlook):
 
 ```
 # SCHOOL EMAIL DAILY REPORT
