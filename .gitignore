@@ -1,0 +1,12 @@
+node_modules/
+dist/
+
+.env
+
+# Local state: OAuth token caches, mock-mode dedupe store.
+data/*
+!data/.gitkeep
+
+# Generated reports.
+reports/*
+!reports/.gitkeep
