@@ -4,7 +4,7 @@ import type { ProviderName } from '../lib/queries';
 
 export default function ProviderTabs({ active, days }: { active: ProviderName; days: number }) {
   return (
-    <Tabs value={active} sx={{ mb: 2 }}>
+    <Tabs value={active} sx={{ minHeight: 0 }}>
       <Tab
         label="Outlook"
         value="outlook"

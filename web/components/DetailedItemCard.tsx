@@ -1,3 +1,5 @@
+'use client';
+
 import { Card, CardContent, Link as MuiLink, Stack, Typography } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import EventIcon from '@mui/icons-material/Event';
@@ -22,11 +24,11 @@ export default function DetailedItemCard({ item }: { item: ReportItem }) {
   return (
     <Card
       variant="outlined"
-      sx={{
+      sx={(theme) => ({
         borderLeftWidth: 4,
         borderLeftColor: category.light,
-        '@media (prefers-color-scheme: dark)': { borderLeftColor: category.dark },
-      }}
+        ...theme.applyStyles('dark', { borderLeftColor: category.dark }),
+      })}
     >
       <CardContent>
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>

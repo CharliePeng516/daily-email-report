@@ -1,11 +1,10 @@
-import { AppBar, Box, Container, Stack, Toolbar, Typography } from '@mui/material';
-import MailLockIcon from '@mui/icons-material/MarkEmailRead';
+import { Box, Container, Stack, Typography } from '@mui/material';
 import { getDashboardData, type ProviderName } from '../lib/queries';
 import ActionList from '../components/ActionList';
 import DaysSelect from '../components/DaysSelect';
 import ErrorsPanel from '../components/ErrorsPanel';
-import LogoutButton from '../components/LogoutButton';
-import ProviderTabs from '../components/ProviderTabs';
+import Footer from '../components/Footer';
+import Navbar from '../components/Navbar';
 import RefreshButton from '../components/RefreshButton';
 import ReportView from '../components/ReportView';
 import AnalyticsSection from '../components/AnalyticsSection';
@@ -34,20 +33,14 @@ export default async function HomePage({
   const { items, errors, lastRunAt } = await getDashboardData(provider, days);
 
   return (
-    <Box sx={{ minHeight: '100dvh', bgcolor: 'background.default' }}>
-      <AppBar position="static" color="transparent" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Toolbar sx={{ gap: 1 }}>
-          <MailLockIcon color="primary" />
-          <Typography variant="h6" component="h1" sx={{ flexGrow: 1 }}>
-            {provider === 'gmail' ? 'Daily Email Report' : 'School Email Report'}
-          </Typography>
-          <LogoutButton />
-        </Toolbar>
-      </AppBar>
+    <Box sx={{ minHeight: '100dvh', bgcolor: 'background.default', display: 'flex', flexDirection: 'column' }}>
+      <Navbar
+        title={provider === 'gmail' ? 'Daily Email Report' : 'School Email Report'}
+        provider={provider}
+        days={days}
+      />
 
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <ProviderTabs active={provider} days={days} />
-
+      <Container maxWidth="lg" sx={{ py: 4, flexGrow: 1 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1} sx={{ mb: 3 }}>
           <Typography variant="body2" color="text.secondary">
             {formatLastRun(lastRunAt)} · last {days} day{days === 1 ? '' : 's'}
@@ -68,6 +61,8 @@ export default async function HomePage({
           <ReportView items={items} />
         )}
       </Container>
+
+      <Footer lastRunAt={lastRunAt} />
     </Box>
   );
 }

@@ -1,3 +1,5 @@
+'use client';
+
 import { Box, Typography } from '@mui/material';
 import { getCategoryMeta } from './category-styles';
 
@@ -14,7 +16,7 @@ export default function CategoryBadge({
   return (
     <Box
       component="span"
-      sx={{
+      sx={(theme) => ({
         display: 'inline-flex',
         alignItems: 'center',
         gap: 0.5,
@@ -25,19 +27,19 @@ export default function CategoryBadge({
         border: '1px solid',
         borderColor: `${light}59`, // ~35% alpha
         bgcolor: `${light}1f`, // ~12% alpha
-        '@media (prefers-color-scheme: dark)': {
+        ...theme.applyStyles('dark', {
           borderColor: `${dark}80`, // ~50% alpha
           bgcolor: `${dark}33`, // ~20% alpha
-        },
-      }}
+        }),
+      })}
     >
       <Icon
-        sx={{
+        sx={(theme) => ({
           fontSize: iconSize,
           color: light,
           flexShrink: 0,
-          '@media (prefers-color-scheme: dark)': { color: dark },
-        }}
+          ...theme.applyStyles('dark', { color: dark }),
+        })}
       />
       <Typography
         variant="caption"

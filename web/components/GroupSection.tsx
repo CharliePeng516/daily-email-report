@@ -1,3 +1,5 @@
+'use client';
+
 import { Box, List, ListItem, ListItemText, Stack, Typography } from '@mui/material';
 import type { SvgIconComponent } from '@mui/icons-material';
 import type { ReportItem, PriorityLevel } from '../lib/queries';
@@ -30,11 +32,11 @@ export default function GroupSection({
     <Box component="section" sx={{ mb: 4 }}>
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
         <Icon
-          sx={{
+          sx={(theme) => ({
             fontSize: 20,
             color: light,
-            '@media (prefers-color-scheme: dark)': { color: dark ?? light },
-          }}
+            ...theme.applyStyles('dark', { color: dark ?? light }),
+          })}
         />
         <Typography variant="h6" component="h2">
           {title} <Typography component="span" color="text.secondary">({items.length})</Typography>

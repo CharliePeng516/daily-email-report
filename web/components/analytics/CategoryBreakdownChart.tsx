@@ -1,3 +1,5 @@
+'use client';
+
 import { Box, Stack, Tooltip, Typography } from '@mui/material';
 import type { ReportItem } from '../../lib/queries';
 import { CATEGORY_ORDER, getCategoryMeta } from '../category-styles';
@@ -41,11 +43,11 @@ export default function CategoryBreakdownChart({ items }: { items: ReportItem[] 
                   sx={{ width: 152, flexShrink: 0 }}
                 >
                   <meta.Icon
-                    sx={{
+                    sx={(theme) => ({
                       fontSize: 14,
                       color: meta.light,
-                      '@media (prefers-color-scheme: dark)': { color: meta.dark },
-                    }}
+                      ...theme.applyStyles('dark', { color: meta.dark }),
+                    })}
                   />
                   <Typography variant="caption" color="text.secondary" noWrap>
                     {meta.label}
@@ -55,14 +57,14 @@ export default function CategoryBreakdownChart({ items }: { items: ReportItem[] 
                 <Tooltip title={`${meta.label}: ${count} (${pct}%)`} arrow>
                   <Box sx={{ flex: 1, height: 16 }}>
                     <Box
-                      sx={{
+                      sx={(theme) => ({
                         width: `${widthPct}%`,
                         minWidth: 4,
                         height: '100%',
                         borderRadius: '4px',
                         bgcolor: meta.light,
-                        '@media (prefers-color-scheme: dark)': { bgcolor: meta.dark },
-                      }}
+                        ...theme.applyStyles('dark', { bgcolor: meta.dark }),
+                      })}
                     />
                   </Box>
                 </Tooltip>
