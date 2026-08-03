@@ -1,5 +1,6 @@
 'use client';
 
+import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { Box, List, ListItem, ListItemText, Stack, Typography } from '@mui/material';
 import type { SvgIconComponent } from '@mui/icons-material';
 import type { ReportItem, PriorityLevel } from '../lib/queries';
@@ -23,6 +24,9 @@ export default function GroupSection({
   /** Renders the "other axis" indicator on condensed rows (e.g. category when grouped by priority, or vice versa). */
   secondaryBadge: (item: ReportItem) => React.ReactNode;
 }) {
+  const [detailedParent] = useAutoAnimate<HTMLDivElement>({ duration: 200 });
+  const [condensedParent] = useAutoAnimate<HTMLUListElement>({ duration: 200 });
+
   if (items.length === 0) return null;
 
   const detailed = items.filter((item) => DETAILED_LEVELS.includes(item.level));
@@ -44,7 +48,7 @@ export default function GroupSection({
       </Stack>
 
       {detailed.length > 0 && (
-        <Stack spacing={1.5} sx={{ mb: condensed.length > 0 ? 1.5 : 0 }}>
+        <Stack ref={detailedParent} spacing={1.5} sx={{ mb: condensed.length > 0 ? 1.5 : 0 }}>
           {detailed.map((item) => (
             <DetailedItemCard key={item.messageId} item={item} />
           ))}
@@ -52,7 +56,7 @@ export default function GroupSection({
       )}
 
       {condensed.length > 0 && (
-        <List disablePadding dense>
+        <List ref={condensedParent} disablePadding dense>
           {condensed.map((item) => (
             <ListItem key={item.messageId} disableGutters sx={{ py: 0.5, alignItems: 'flex-start', gap: 1.5 }}>
               <Box sx={{ pt: 0.25 }}>{secondaryBadge(item)}</Box>

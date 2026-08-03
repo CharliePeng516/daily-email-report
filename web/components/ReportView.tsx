@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { Box, Chip, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
@@ -21,6 +22,7 @@ export default function ReportView({ items }: { items: ReportItem[] }) {
   const [view, setView] = useState<View>('priority');
   const [activeCategories, setActiveCategories] = useState<Set<string>>(new Set());
   const [activeLevels, setActiveLevels] = useState<Set<PriorityLevel>>(new Set());
+  const [groupsParent] = useAutoAnimate<HTMLDivElement>({ duration: 200 });
 
   const categoriesPresent = useMemo(() => {
     const counts = new Map<string, number>();
@@ -169,35 +171,37 @@ export default function ReportView({ items }: { items: ReportItem[] }) {
 
       {filteredItems.length === 0 ? (
         <Typography color="text.secondary">No emails match this filter.</Typography>
-      ) : view === 'priority' ? (
-        LEVEL_ORDER.map((level) => {
-          const meta = PRIORITY_META[level];
-          return (
-            <GroupSection
-              key={level}
-              title={level}
-              Icon={meta.Icon}
-              light={meta.color}
-              items={filteredItems.filter((item) => item.level === level)}
-              secondaryBadge={(item) => <CategoryBadge category={item.category} size="small" />}
-            />
-          );
-        })
       ) : (
-        CATEGORY_ORDER.map((category) => {
-          const meta = getCategoryMeta(category);
-          return (
-            <GroupSection
-              key={category}
-              title={meta.label}
-              Icon={meta.Icon}
-              light={meta.light}
-              dark={meta.dark}
-              items={filteredItems.filter((item) => categoryKeyOf(item) === category)}
-              secondaryBadge={(item) => <PriorityBadge level={item.level} size="small" />}
-            />
-          );
-        })
+        <Box ref={groupsParent}>
+          {view === 'priority'
+            ? LEVEL_ORDER.map((level) => {
+                const meta = PRIORITY_META[level];
+                return (
+                  <GroupSection
+                    key={level}
+                    title={level}
+                    Icon={meta.Icon}
+                    light={meta.color}
+                    items={filteredItems.filter((item) => item.level === level)}
+                    secondaryBadge={(item) => <CategoryBadge category={item.category} size="small" />}
+                  />
+                );
+              })
+            : CATEGORY_ORDER.map((category) => {
+                const meta = getCategoryMeta(category);
+                return (
+                  <GroupSection
+                    key={category}
+                    title={meta.label}
+                    Icon={meta.Icon}
+                    light={meta.light}
+                    dark={meta.dark}
+                    items={filteredItems.filter((item) => categoryKeyOf(item) === category)}
+                    secondaryBadge={(item) => <PriorityBadge level={item.level} size="small" />}
+                  />
+                );
+              })}
+        </Box>
       )}
     </Box>
   );

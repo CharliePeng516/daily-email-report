@@ -9,7 +9,7 @@ export default function AnalyticsSection({ items, days }: { items: ReportItem[];
   if (items.length === 0) return null;
 
   return (
-    <Stack spacing={2} sx={{ mb: 4 }}>
+    <Stack spacing={2}>
       <SummaryStats items={items} />
 
       <Grid container spacing={2}>

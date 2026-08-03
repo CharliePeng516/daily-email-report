@@ -1,11 +1,21 @@
+'use client';
+
 import { Paper, Stack, Typography } from '@mui/material';
+import { motion } from 'motion/react';
 import type { ReportItem } from '../lib/queries';
+import NumberTicker from './NumberTicker';
 
 function StatTile({ label, value }: { label: string; value: number }) {
   return (
-    <Paper variant="outlined" sx={{ px: 2, py: 1.25, flex: '1 1 120px' }}>
+    <Paper
+      component={motion.div}
+      whileHover={{ y: -2 }}
+      transition={{ duration: 0.15 }}
+      variant="outlined"
+      sx={{ px: 2, py: 1.25, flex: '1 1 120px' }}
+    >
       <Typography variant="h5" fontWeight={700} lineHeight={1.2}>
-        {value}
+        <NumberTicker value={value} />
       </Typography>
       <Typography variant="caption" color="text.secondary">
         {label}

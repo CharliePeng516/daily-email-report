@@ -1,4 +1,6 @@
 import { Box, Container, Stack, Typography } from '@mui/material';
+import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import { getDashboardData, type ProviderName } from '../lib/queries';
 import ActionList from '../components/ActionList';
 import DaysSelect from '../components/DaysSelect';
@@ -8,6 +10,7 @@ import Navbar from '../components/Navbar';
 import RefreshButton from '../components/RefreshButton';
 import ReportView from '../components/ReportView';
 import AnalyticsSection from '../components/AnalyticsSection';
+import CollapsibleSection from '../components/CollapsibleSection';
 
 // Never statically cache — this dashboard reflects whatever the CLI most
 // recently wrote to Postgres, so every request should query fresh.
@@ -40,7 +43,7 @@ export default async function HomePage({
         days={days}
       />
 
-      <Container maxWidth="lg" sx={{ py: 4, flexGrow: 1 }}>
+      <Container maxWidth="lg" sx={{ py: 4, px: { xs: 2, sm: 3, md: 4 }, flexGrow: 1 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1} sx={{ mb: 3 }}>
           <Typography variant="body2" color="text.secondary">
             {formatLastRun(lastRunAt)} · last {days} day{days === 1 ? '' : 's'}
@@ -53,12 +56,25 @@ export default async function HomePage({
 
         <ErrorsPanel errors={errors} />
         <ActionList items={items} />
-        <AnalyticsSection items={items} days={days} />
 
         {items.length === 0 ? (
           <Typography color="text.secondary">Nothing here yet — run the CLI for this provider to populate it.</Typography>
         ) : (
-          <ReportView items={items} />
+          <>
+            <CollapsibleSection id="dashboard" eyebrow="Overview" title="Report dashboard" Icon={InsightsOutlinedIcon}>
+              <AnalyticsSection items={items} days={days} />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              id="detailed-report"
+              eyebrow="Full breakdown"
+              title="Detailed report"
+              count={items.length}
+              Icon={FactCheckOutlinedIcon}
+            >
+              <ReportView items={items} />
+            </CollapsibleSection>
+          </>
         )}
       </Container>
 
